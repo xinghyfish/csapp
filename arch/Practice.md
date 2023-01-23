@@ -1,4 +1,5 @@
-4.1
+# 4.1
+
 ```
 0x100: 30f30f00000000000000
 0x10a: 2031
@@ -8,7 +9,9 @@
 0x118: 700c0100000000000000
 ```
 
-4.2
+
+# 4.2
+
 ```
 A)  irmovq $-4, %rbx
 	rmmovq %rsi, 0x800(%rbx)
@@ -32,7 +35,9 @@ E)  xorq   %rsi, %rdx
 	.byte  0xf0
 ```
 
-4.3
+
+# 4.3
+
 ```
 sum:
 	xorq   %rax
@@ -48,7 +53,9 @@ test:
 	ret
 ```
 
-4.4
+
+# 4.4
+
 ```
 rsum:
 	xorq   %rax, %rax
@@ -67,7 +74,9 @@ return:
 	ret
 ```
 
-4.5
+
+# 4.5
+
 ```asm
 absSum:
 	irmovq $8, %r8
@@ -90,7 +99,9 @@ test:
 	ret
 ```
 
-4.6
+
+# 4.6
+
 ```asm
 absSum:
 	irmovq $8, %r8
@@ -110,21 +121,31 @@ pos:
 	ret
 ```
 
-4.7
+
+# 4.7
+
 第一步将栈顶指针保存下来，第二步将栈顶指针的push到栈，第三步将栈顶指针弹出到rsp，最后比较。实验发现，`push %rsp`将保存原`%rsp`的值。
 
-4.8
+
+# 4.8
+
 `popq %rsp <==> mrmovq (%rsp), %rsp`
 
-4.9
+
+# 4.9
+
 ```c
 bool eq = (a && !b) || (!a && b) 
 ```
 
-4.10
+
+# 4.10
+
 ![[XOR.drawio.png]]
 
-4.11
+
+# 4.11
+
 执行到第二个选择语句时已经可以确保A不是最小的，即A>B或者A>C。此时只需要确保B<C即可确保B最小，因此可以简化为
 ```HCL
 word Min3 = [
@@ -134,7 +155,9 @@ word Min3 = [
 ];
 ```
 
-4.12
+
+# 4.12
+
 ```HCL
 Word Median3 = [
 		B <= A && A <= C: A;
@@ -145,7 +168,9 @@ Word Median3 = [
 ];
 ```
 
-4.13
+
+# 4.13
+
 |  Stage  |  Generic `irmovq V, rB`  |  Specific `irmovq $128, %rsp`  |
 |  ---- |  ----  |  ----  |
 | Fetch  | `icode:ifun <- M1[PC]` | `icode:ifun <- M1[0x016] = 3:0`  |
@@ -158,7 +183,9 @@ Word Median3 = [
 | Write Back | `R[rB] <- valE` | `R[rB] <- valE = 128` |
 | PC update | `PC <- valP` | `PC <- valP = 0x020` |
 
-4.14
+
+# 4.14
+
 |  Stage  |  Generic `popq rA`  |  Specific `popq %rax`  |
 |  -  |  -  |  -  |
 | Fetch | `icode:ifun <- M1[PC]` | `icode:ifun <- M1[0x02c] = b:0` |
@@ -172,13 +199,19 @@ Word Median3 = [
 | | `R[rA] <- valM` | `R[%rax] <- 9` |
 | PC update | `PC <- valP` | `PC <- 0x02e` |
 
-4.15
+
+# 4.15
+
 将原来的栈顶指针寄存器 `%rsp` 的值压到栈顶。
 
-4.16
+
+# 4.16
+
 write-back阶段的两个复制操作都会修改 `%rsp` 寄存器存储的值。而根据Y86-64指令定义的顺序， `valM` 是有效值，因此这一操作等价于什么都没操作。
 
-4.17
+
+# 4.17
+
 | Stage | `cmovXX rA, rB` |
 | - | - |
 | Fetch | `icode:ifun <- M1[PC]` |
@@ -191,7 +224,9 @@ write-back阶段的两个复制操作都会修改 `%rsp` 寄存器存储的值�
 | Write back | `if (Cnd) R[rB] <- valE` |
 | PC update | `PC <- valP` |
 
-4.18
+
+# 4.18
+
 |  Stage  |  Generic `call Dest` |  Specific `call 0x041`  |
 |  -  |  -  |  -  |
 | Fetch | `icode:ifun <- M1[PC]` | `icode:ifun <- M1[0x037] = 8:0` |
@@ -204,13 +239,17 @@ write-back阶段的两个复制操作都会修改 `%rsp` 寄存器存储的值�
 | Write back | `R[%rsp] <- valE` | `R[%rsp] <- 120` |
 | PC update | `PC <- valC` | `PC <- 0x041` |
 
-4.19
+
+# 4.19
+
 ```HCL
 bool need_valC = 
 		icode in { IIRMOVQ, IMRMOVQ, IRMMOVQ, IJXX, ICALL };
 ```
 
-4.20
+
+# 4.20
+
 ```HCL
 word srcB = [
 		icode in { IRMMOVQ, IMRMOVQ, IOPQ } : rB;
@@ -219,17 +258,22 @@ word srcB = [
 ];
 ```
 
-4.21
+
+# 4.21
+
 ```HCL
 word dstM = [
 		icode in { IMRMOVQ, IPOPQ } : rA
 ];
 ```
 
-4.22
+# 4.22
+
 写入 `dstM` 的具有更高的优先级。
 
-4.23
+
+# 4.23
+
 ```HCL
 word aluB = [
 		icode in { IOPQ, IMRMOVQ, IPUSHQ, IPOPQ, 
@@ -239,7 +283,9 @@ word aluB = [
 ];
 ```
 
-4.24
+
+# 4.24
+
 ```HCL
 word dstE = [
 		icode in { IRRMOVQ } && Cnd : rB;
@@ -249,7 +295,9 @@ word dstE = [
 ];
 ```
 
-4.25
+
+# 4.25
+
 ```HCL
 word mem_data = [
 		icode in { IRMMOVQ, IPUSHQ } : valA;
@@ -257,12 +305,16 @@ word mem_data = [
 ];
 ```
 
-4.26
+
+# 4.26
+
 ```HCL
 bool mem_write = icode in { IRMMOVQ, IPUSH, ICALL };
 ```
 
-4.27
+
+# 4.27
+
 ```HCL
 word stat = {
 		imen_error || dmem_error : SADR;
@@ -272,21 +324,27 @@ word stat = {
 }
 ```
 
-4.28
-A. 考虑到短板效应，应该将寄存器放在C和D之间，
-throughput = 1000/190 GIPS = 5.26 GIPS
-latency = 190 ps * 2 = 380 ps
-B. 考虑到短板效应，应该将寄存器放在B和C、D和E之间，
-throughput = 1000/130 GIPS = 7.69 GIPS
-latency = 130 ps * 3 = 390 ps
-C. 考虑到短板效应，应该将寄存器放在A和B、C和D、D和E之间，
-throughput = 1000/110 GIPS = 9.09 GIPS
-latency = 110 ps * 4 = 440 ps
-D. 设计为五阶段寄存器，仅E和F之间不设置寄存器，
-throughput = 1000/100 GIPS = 10.00 GIPS
-latency = 100 ps * 5 = 500 ps
+# 4.28
 
-4.29
+A. 考虑到短板效应，应该将寄存器放在C和D之间，
+- throughput = 1000/190 GIPS = 5.26 GIPS
+- latency = 190 ps * 2 = 380 ps
+
+B. 考虑到短板效应，应该将寄存器放在B和C、D和E之间，
+- throughput = 1000/130 GIPS = 7.69 GIPS
+- latency = 130 ps * 3 = 390 ps
+
+C. 考虑到短板效应，应该将寄存器放在A和B、C和D、D和E之间，
+- throughput = 1000/110 GIPS = 9.09 GIPS
+- latency = 110 ps * 4 = 440 ps
+
+D. 设计为五阶段寄存器，仅E和F之间不设置寄存器，
+- throughput = 1000/100 GIPS = 10.00 GIPS
+- latency = 100 ps * 5 = 500 ps
+
+
+# 4.29
+
 A.
 $$
 throughout = \frac{1,000}{300/k + 20}=\frac{1,000k}{300+20k}
@@ -301,5 +359,82 @@ $$
 ultimate\ throughout = \lim_{k \to \inf} = \frac{1,000}{200}=50 GIPS
 $$
 
-4.30
 
+# 4.30
+
+```HCL
+word f_stat = [
+		imem_error : SADDR;
+		!instr_valid : SINS;
+		f_icode == IHALT : SHLT;
+		1 : SAOK;
+];
+```
+
+
+# 4.31
+
+```HCL
+word d_dstE = [
+	D_icode in { IOPQ, IRRMOVQ, IRRMOVQ } : D_rB;
+	D_icode in { IPUSHQ, IPOPQ, ICALL, IRET } : RRSP;
+	1 : RNOME;
+]
+```
+
+
+# 4.32
+
+如果这么操作，那么line 5的结果将会是 `M8[0x100] = 0x108`，和我们期望的 `M8[0x100] = 0x3` 不符。
+
+
+# 4.33
+
+摆烂做法：
+
+```Y86-64
+irmovq $5, %rdx
+irmovq $0x100, %rsp
+rmmovq %rdx, 0(%rsp)
+popq %rsp
+nop
+nop
+rrmovq %rsp, %rax
+```
+
+
+# 4.34
+
+```HCL
+word d_valB = [
+		d_srcB == e_dstE : e_valE;    # Forward valE from execute stage
+		d_srcB == M_dstM : m_valM;    # Forward valM from memory stage
+		d_srcB == M_dstE : M_valE;    # Forward valE from memory stage
+		d_srcB == W_dstM : W_valM;    # Forward valM from write-back stage
+		d_srcB == W_dstE : W_valE;    # Forward valE from write-back stage
+		1 : d_rvalB;  # Use value read from register file
+];
+```
+
+
+# 4.35
+
+```Y86-64
+irmovq $0x1, %rax
+irmovq $0x2, %rdx
+xor    %rcx, %rcx
+cmovne %rax, %rdx
+addq   %rdx, %rdx
+```
+
+这个例子也说明`cmovXX` 指令是一个例外。如果改为 `E_dstE`，则在 `cmovne %rax, %rdx` 进入 Execute 阶段发现不满足条件，将会设置 `word e_dstE = RNOME`，但是 `E_dstE = RRAX` 不变。因此后面紧跟的 `addq %rdx, %rdx` 则匹配到 `E_dstE = %rdx` ，则将会把 `e_valE` 也就是 `R[%rax] = 0x1` 作为结果放入 aluA导致计算结果错误。 
+
+
+# 4.36
+
+```HCL
+word m_stat = [
+		d_mem_error : SADR;
+		1 : M_stat;
+];
+```
