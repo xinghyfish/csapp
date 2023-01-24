@@ -337,3 +337,52 @@ word dstE = [
 ### 4.4 Memory阶段
 
 这部分除了部分信号量重命名，其他和SEQ几乎一致。
+
+## 5 Pipeline控制逻辑
+
+控制逻辑部分主要需要补充下面几个问题的控制逻辑：
+- *Load/Use Hazards* : pipeline要在从内存中读数据的指令和使用该值的指令间 stall 一个时钟周期
+- *Processing* `ret` : pipeline需要在 `ret` 语句到达 write-back ji阶段前一直 stall 
+- *Mispredicted branches* : 当 `jXX` 没有跳转时，后面的指令需要被取消，而且 `jXX` 指令的下一条指令将进入 Fetch 阶段
+- *Exceptions* : 触发了异常的指令后面的指令不能修改编程者可见状态。
+
+下面将针对上面几种情况设计对应的控制逻辑来解决这些问题。
+
+### 5.1 解决方案
+
+#### 5.1.1 解决 Load/Use Hazards
+
+能够触发这一问题的指令只有 `mrmovq` 和 `popq` 指令。当满足下列条件：
+1. 任意一条上述指令在 Execute 阶段
+2. Decode 阶段的指令需要上述指令的目的寄存器
+满足上述条件时，pipeline控制逻辑保持 pipeline 寄存器 `F` 和 `D` 固定，在 Execute 阶段插入一个 bubble。
+
+#### 5.1.2 解决 `ret` 跳转
+
+由于不视图进行预测返回地址，因此在 HCL 实现的 PC 预测逻辑将顺序的下一条指令作为下一条 Fetch 的地址。进行 Decode 后，由于下一条指令已经进入 Fetch  阶段，因此下一条指令将被 bubble 替代进入 Decode 阶段；`ret` 指令后的指令都将保持在 Fetch 阶段，直到 `ret` 指令执行到 Write-back 阶段才获得跳转后的指令地址。
+
+#### 5.1.3 解决 Mispredicted branches
+
+在上文中已经提到，如果预测失败，则当 jump 指令执行到 Execute 阶段时发现这个问题，控制逻辑单元将会在 Decode 和下一个时钟周期的 Execute 阶段插入 bubble ，这样就可以取消后面的指令。在插入两个 bubble 后（也就是 jump 指令执行到 Memory 阶段的周期）pipeline 读取正确的指令到 Fetch 阶段。
+
+#### 5.1.4 解决 Exceptions
+
+实现 Exception 处理需要基于以下事实：
+1. 异常在程序执行的 Fetch 阶段（非法指令异常）和 Memory 阶段（地址异常）被检测到；
+2. 程序状态在 Execute 、 Memory 和 Write-back 阶段被修改。
+
+因此，当指令执行到 Memory 阶段时检测到问题，我们需要避免后面的指令修改编程者可见状态，需要采取如下步骤：
+1. Execute 阶段 `set_cc` 信号失效：检测 `m_stat` 和 `W_stat` 信号，如果有异常则设置 `set_cc = 0`
+2. 在 Memory 阶段注入 bubble 并使任何写入数据内存的行为失效
+3. Write-back 阶段出现异常指令则进行 stall
+
+通过这样的设置，就可以做到：异常指令前的指令都可以完成；后面的指令不会修改编程者可见状态。
+
+### 5.2 控制条件组合
+
+具体的图标参考教材（包含前文），这里主要概括控制条件组合情况下的一些逻辑判断。
+
+当上面的几种控制逻辑涉及的情况同时出现时，需要考虑Combination，主要有：
+1. Mispredict(`jXX` in Execute) + `ret`(in Decode)。这种情况下，优先执行stall或者bubble，因此 `ret` 指令不被执行。
+2. Load/Use(Load in Execute + Use in Decode) + `ret`(in Decode) 。这种情况下，Decode 阶段我们不期望出现 bubble 把 `ret` 指令清空。因此合并之后改成 Stall 。
+

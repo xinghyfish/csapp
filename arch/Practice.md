@@ -1,6 +1,6 @@
 # 4.1
 
-```
+```text
 0x100: 30f30f00000000000000
 0x10a: 2031
 0x10c:
@@ -12,7 +12,7 @@
 
 # 4.2
 
-```
+```Y86-64
 A)  irmovq $-4, %rbx
 	rmmovq %rsi, 0x800(%rbx)
 B)  pushq  %rsi
@@ -38,7 +38,7 @@ E)  xorq   %rsi, %rdx
 
 # 4.3
 
-```
+```Y86-64
 sum:
 	xorq   %rax
 	andq   $rsi, %rsi
@@ -56,7 +56,7 @@ test:
 
 # 4.4
 
-```
+```Y86-64
 rsum:
 	xorq   %rax, %rax
 	andq   %rsi, %rsi
@@ -77,48 +77,48 @@ return:
 
 # 4.5
 
-```asm
-absSum:
-	irmovq $8, %r8
-	irmovq $1, %r9
-	xorq   %rax. %rax
-	andq   %rsi, %rsi
-	jmp
-loop:
-	mrmovq (%rdi), %r10
-	xorq   %r11, %r11
-	subq   %r10, %r11
-	jle    pos
-	rrmovq %r11, %r10 
-pos:
-	addq   %r10, %rax
-	addq   %r8, %rdi
-	subq   %r9, %rsi
-test:
-	jne    loop
-	ret
+```Y86-64
+absSum: 
+		irmovq $8, %r8
+		irmovq $1, %r9
+		xorq   %rax, %rax
+		andq   %rsi, %rsi
+		jmp    test
+loop:	
+		mrmovq (%rdi), %r10
+		xorq   %r11, %r11
+		subq   %r10, %r11
+		jle    pos
+		rrmovq %r11, %r10 
+pos:	
+		addq   %r10, %rax
+		addq   %r8, %rdi
+		subq   %r9, %rsi
+test:	
+		jne    loop
+		ret
 ```
 
 
 # 4.6
 
-```asm
-absSum:
-	irmovq $8, %r8
-	irmovq $1, %r9
-	xorq   %rax. %rax
-	andq   %rsi, %rsi
-	jmp
-loop:
-	mrmovq (%rdi), %r10
-	xorq   %r11, %r11
-	subq   %r10, %r11
-	cmovq  %r11, %r10
-pos:
-	addq   %r10, %rax
-	addq   %r8, %rdi
-	subq   %r9, %rsi
-	ret
+```Y86-64
+absSum: 
+		irmovq $8, %r8
+		irmovq $1, %r9
+		xorq   %rax. %rax
+		andq   %rsi, %rsi
+		jmp
+loop:	
+		mrmovq (%rdi), %r10
+		xorq   %r11, %r11
+		subq   %r10, %r11
+		cmovq  %r11, %r10
+		addq   %r10, %rax
+		addq   %r8, %rdi
+		subq   %r9, %rsi
+test:   
+		jne loop
 ```
 
 
@@ -129,7 +129,9 @@ pos:
 
 # 4.8
 
-`popq %rsp <==> mrmovq (%rsp), %rsp`
+```Y86-64
+popq %rsp <==> mrmovq (%rsp), %rsp`
+```
 
 
 # 4.9
@@ -376,9 +378,9 @@ word f_stat = [
 
 ```HCL
 word d_dstE = [
-	D_icode in { IOPQ, IRRMOVQ, IRRMOVQ } : D_rB;
-	D_icode in { IPUSHQ, IPOPQ, ICALL, IRET } : RRSP;
-	1 : RNOME;
+		D_icode in { IOPQ, IRRMOVQ, IRRMOVQ } : D_rB;
+		D_icode in { IPUSHQ, IPOPQ, ICALL, IRET } : RRSP;
+		1 : RNOME;
 ]
 ```
 
@@ -438,3 +440,102 @@ word m_stat = [
 		1 : M_stat;
 ];
 ```
+
+
+# 4.37
+
+```Y86-64
+main:   irmovq Stack, %rsp
+		irmovq rtnp, %rax
+		pushq  %rax
+		xorq   %rax, %rax
+		jne proc
+		irmovq $1, %rax
+		halt
+proc:   ret
+		irmovq $2, %rbx
+		halt
+rtnp:   irmovq $3, %rdx
+		halt
+.pox 0x40
+Stack:
+```
+
+刚开始并没有理解清楚题意，所以程序写的不是很清楚，这里主要指的是当两种情况同时出现的时候优先级的选取。默认考虑 `jXX` 优先级更高就没有想到潜在的问题。
+
+
+# 4.38
+
+```Y86-64
+		irmovq mem, %rbx
+		mrmovq 0(%rbx), %rsp
+		ret
+		halt
+rtnpt:	irmovq %$5%, %rsi
+		halt
+.pos 0x40
+mem:    .quad stack
+.pos 0x50
+stack:  .quad rtnpt
+```
+
+
+# 4.39
+
+```HCL
+bool D_stall = [
+		# Conditions for a load/use hazard
+		E_icode in { IMRMOVQ, IPOPQ } &&
+		 E_dstM in { d_srcA, d_srcB };
+];
+```
+
+
+# 4.40
+
+```HCL
+bool E_bubble = [
+		# Conditions for a load/use hazard
+		E_icode in { IMRMOVQ, IPOPQ } &&
+		 E_dstM in { d_srcA, d_srcB } ||
+		# Conditions for mispredicted branches
+		(E_icode in { IJXX } && !e_Cnd);
+];
+```
+
+
+# 4.41
+
+```HCL
+bool set_cc = [
+		# normal stat
+		!m_stat in { SADR, SINS, SHLT } && !W_stat in { SADR, SINS, SHLT };
+];
+```
+
+
+# 4.42
+
+```HCL
+bool M_bubble = [
+		# exception occurs
+		m_stat in { SADR, SINS, SHLT } || W_stat in { SADR, SINS, SHLT };
+];
+
+bool W_stall = [
+		# exception occurs
+		W_stat in { SADR, SINS, SHLT };
+];
+```
+
+
+# 4.43
+
+$$
+mp = 0.20\times 0.35\times2 = 0.14
+$$
+$$
+CPI = 1 + 0.05 + 0.14+0.06=1.25
+$$
+
+
