@@ -107,7 +107,7 @@ Loop3:	mrmovq (%rdi), %rbx	# read val from src...
 	iaddq $1, %rax		# count++
 Npos3:	iaddq $8, %rsi		# dst++
 	iaddq $-1, %rdx         # len--
-        jg Loop3		# if so, goto Loop3:
+        jg Loop3		# if so, goto Loop3: 
 ##################################################################
 # Do not modify the following section of code
 # Function epilogue.
