@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "csapp.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "combine.h": "c",
+        "vec.h": "c"
     }
 }
